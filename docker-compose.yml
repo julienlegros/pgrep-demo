@@ -1,0 +1,71 @@
+version: "3"
+networks:
+    pg_net:
+        driver: bridge
+        driver_opts:
+          com.docker.network.bridge.name: brpg0
+        ipam:
+            config:
+                - subnet: 10.54.0.0/24
+                  ip_range: 10.54.0.128/25
+                  gateway: 10.54.0.1
+
+services:
+    pg_primary:
+        image: "postgres:12"
+        command: [
+            "postgres",
+            "-N", "1000",
+            "-c", "config_file=/etc/postgresql/postgresql.conf"
+        ]
+        environment:
+            POSTGRES_HOST_AUTH_METHOD: trust
+            POSTGRES_USER: odoo
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+            POSTGRES_DB: postgres
+            POSTGRES_REP_USER: ${POSTGRES_REP_USER}
+            POSTGRES_REP_PASSWORD: ${POSTGRES_REP_PASSWORD}
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U odoo -d postgres"]
+            interval: 1s
+        networks:
+            pg_net:
+                ipv4_address: 10.54.0.32
+        restart: unless-stopped
+        volumes:
+            - "${PG_DATA_ROOT}/pg_primary_data:/var/lib/postgresql/data:rw"
+            - "./postgresql.conf:/etc/postgresql/postgresql.conf"
+            - "./replication_primary.conf:/etc/postgresql/replication.conf"
+            - "./pg_hba.conf:/etc/postgresql/pg_hba.conf"
+            - "./scripts/init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh"
+
+    pg_replica:
+        image: "postgres:12"
+        command: [
+            "./init-replication.sh",
+            "10.54.0.32",
+            "postgres",
+            "-N", "1000",
+            "-c", "config_file=/etc/postgresql/postgresql.conf"
+        ]
+        environment:
+            POSTGRES_USER: odoo
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+            POSTGRES_DB: postgres
+            POSTGRES_REP_USER: ${POSTGRES_REP_USER}
+            POSTGRES_REP_PASSWORD: ${POSTGRES_REP_PASSWORD}
+            POSTGRES_REP_APPNAME: ${POSTGRES_REP_APPNAME_1}
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U odoo -d postgres"]
+            interval: 1s
+        networks:
+            pg_net:
+                ipv4_address: 10.54.0.33
+        restart: unless-stopped
+        volumes:
+            - "${PG_DATA_ROOT}/pg_replica_data:/var/lib/postgresql/data:rw"
+            - "./postgresql.conf:/etc/postgresql/postgresql.conf"
+            - "./pg_hba.conf:/etc/postgresql/pg_hba.conf"
+            - "./scripts/init-replication.sh:/init-replication.sh"
+        depends_on:
+          - "pg_primary"

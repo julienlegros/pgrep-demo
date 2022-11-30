@@ -1,0 +1,9 @@
+#!/bin/bash
+set -e
+set -x
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+    CREATE USER ${POSTGRES_REP_USER} WITH PASSWORD '${POSTGRES_REP_PASSWORD}' REPLICATION;
+EOSQL
+
+echo "POST INIT"
